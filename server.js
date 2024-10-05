@@ -1,23 +1,19 @@
 const express = require('express');
 const mercadopago = require('mercadopago');
 const cors = require('cors');
-const path = require('path');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
 // Configuração do Mercado Pago com token
-mercadopago.configurations.setAccessToken(process.env.ACCESS_TOKEN);
+mercadopago.configurations.setAccessToken('APP_USR-6293224342595769-100422-59d0a4c711e8339398460601ef894665-558785318');
 
 // Middleware para processar JSON e CORS
 app.use(express.json());
 app.use(cors());
 
-// Serve arquivos estáticos (opcional)
-app.use(express.static(path.join(__dirname, 'public')));
-
 // Endpoint para gerar o QR code PIX
-app.post('/generate_pix_qr', async (req, res) => {
+app.post('/api/generate_pix_qr', async (req, res) => {
   try {
     const { name, amount, cpf, email } = req.body;
 
@@ -26,16 +22,15 @@ app.post('/generate_pix_qr', async (req, res) => {
       return res.status(400).json({ error: 'Parâmetros inválidos' });
     }
 
-    // Dados de pagamento do Mercado Pago
     const payment_data = {
       transaction_amount: amount,
       description: 'Doação para o projeto',
       payment_method_id: 'pix',
-      notification_url: 'https://seu-endereco-no-render.com/notifications', // Substitua pela URL do webhook no Render
+      notification_url: `${process.env.NOTIFICATION_URL}/api/notifications`, // URL do webhook
       payer: {
         first_name: name,
-        last_name: 'Lindo', // Pode ser adaptado ou removido
-        email: email || 'email_padrao@gmail.com',
+        last_name: 'Lindo', // Este é opcional, apenas um exemplo
+        email: email || 'ogustadesigner@gmail.com',
         identification: {
           type: 'CPF',
           number: cpf || '56402807869'
@@ -43,15 +38,12 @@ app.post('/generate_pix_qr', async (req, res) => {
       }
     };
 
-    // Criação do pagamento
     const response = await mercadopago.payment.create(payment_data);
     const point_of_interaction = response.body.point_of_interaction;
 
     if (point_of_interaction && point_of_interaction.transaction_data) {
       const qrCodeBase64 = point_of_interaction.transaction_data.qr_code_base64;
       const pixCode = point_of_interaction.transaction_data.qr_code;
-
-      // Retorno do QR code e código PIX
       res.json({ qr_code_base64: qrCodeBase64, pix_code: pixCode });
     } else {
       res.status(500).json({ error: 'Erro ao gerar QR Code PIX' });
@@ -63,31 +55,10 @@ app.post('/generate_pix_qr', async (req, res) => {
 });
 
 // Endpoint para receber notificações do Mercado Pago
-app.post('/notifications', async (req, res) => {
-  try {
-    const paymentId = req.body.data.id;
-
-    // Consulta o status do pagamento
-    const response = await mercadopago.payment.findById(paymentId);
-    const paymentStatus = response.body.status;
-
-    if (paymentStatus === 'approved') {
-      console.log('Pagamento aprovado!', paymentId);
-    }
-
-    res.sendStatus(200); // Confirma que a notificação foi recebida
-  } catch (error) {
-    console.error('Erro ao processar notificação:', error);
-    res.sendStatus(500);
-  }
+app.post('/api/notifications', (req, res) => {
+  console.log('Notificação recebida:', req.body);
+  res.sendStatus(200); // Confirma que a notificação foi recebida
 });
 
-// Endpoint de health check
-app.get('/healthz', (req, res) => {
-  res.status(200).send('OK');
-});
-
-// Inicializa o servidor
-app.listen(PORT, () => {
-  console.log(`Servidor rodando em http://localhost:${PORT}`);
-});
+// Inicializa o servidor (não necessário para Vercel)
+module.exports = app;
